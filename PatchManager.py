@@ -8,6 +8,9 @@
 
 """See docstring for PatchManager class"""
 
+# pylint: disable=invalid-name
+# pylint: disable=too-few-public-methods
+
 from os import path
 import plistlib
 import xml.etree.ElementTree as ET
@@ -15,7 +18,7 @@ import datetime
 import logging.handlers
 import requests
 
-from autopkglib import Processor, ProcessorError
+from autopkglib import Processor, ProcessorError# pylint: disable=import-error
 
 APPNAME = "PatchManager"
 LOGLEVEL = logging.DEBUG
@@ -48,12 +51,11 @@ class PatchManager(Processor):
         "patch_manager_summary_result": {"description": "Summary of action"}
     }
 
-    pkg = Package()
-
-    def setup_logging(self):
+    def __init__(self):
         """Defines a nicely formatted logger"""
 
         self.logger = logging.getLogger(APPNAME)
+        self.logger.setLevel(LOGLEVEL)
         # we may be the second and subsequent iterations of JPCImporter
         # and already have a handler.
         if len(self.logger.handlers) > 0:
@@ -67,14 +69,8 @@ class PatchManager(Processor):
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
-        self.logger.addHandler(ch)
-        self.logger.setLevel(LOGLEVEL)
+        self.logger.addHandler(handler)
 
-    def policy(self):
-        """Download the TEST policy for the app and return version string"""
-        self.logger.warning(
-            "******** Starting policy %s *******" % self.pkg.title
-        )
         # Which pref format to use, autopkg or jss_importer
         autopkg = False
         if autopkg:
@@ -82,13 +78,26 @@ class PatchManager(Processor):
                 "~/Library/Preferences/com.github.autopkg.plist"
             )
             prefs = plistlib.load(open(plist, "rb"))
-            self.base = prefs["JSS_URL"] + "/JSSResource/"
+            self.url = prefs["JSS_URL"]
             self.auth = (prefs["API_USERNAME"], prefs["API_PASSWORD"])
         else:
             plist = path.expanduser("~/Library/Preferences/JPCImporter.plist")
             prefs = plistlib.load(open(plist, "rb"))
-            self.base = prefs["url"] + "/JSSResource/"
+            self.server = prefs["url"]
             self.auth = (prefs["user"], prefs["password"])
+         # do some set up
+        self.hdrs = {"Accept": "application/xml", "Content-type": "application/xml"}
+        self.base = self.server + "/JSSResource/"
+        self.pkg = Package()
+        self.pkg.pkg_path = self.env.get("pkg_path")
+        self.pkg.name = path.basename(self.pkg.pkg_path)
+        self.pkg.title = self.pkg.name.split("-")[0]
+
+    def policy(self):
+        """Download the TEST policy for the app and return version string"""
+        self.logger.warning(
+            "******** Starting policy %s *******", self.pkg.title
+        )
         policy_name = "TEST-{}".format(self.pkg.title)
         url = self.base + "policies/name/{}".format(policy_name)
         self.logger.debug(
@@ -112,10 +121,14 @@ class PatchManager(Processor):
             "package_configuration/packages/package/name"
         ).text
         self.logger.debug(
-            "Version in TEST Policy %s " % self.pkg.name.split("-", 1)[1][:-4]
+            "Version in TEST Policy %s ", self.pkg.name.split("-", 1)[1][:-4]
         )
         # return the version number
         return self.pkg.name.split("-", 1)[1][:-4]
+
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-statements
 
     def patch(self):
         """Now we check for, then update the patch definition"""
@@ -158,7 +171,6 @@ class PatchManager(Processor):
             if self.pkg.version in record.findtext("software_version"):
                 self.logger.debug("Found our version")
                 if record.findtext("package/name"):
-                    self.logger.debug("Definition already points to package")
                     return 0
                 package = record.find("package")
                 add = ET.SubElement(package, "id")
@@ -178,7 +190,7 @@ class PatchManager(Processor):
             )
         # update the patch def
         data = ET.tostring(root)
-        self.logger.debug("About to put PST: %s" % url)
+        self.logger.debug("About to put PST: %s", url)
         ret = requests.put(url, auth=self.auth, data=data)
         if ret.status_code != 201:
             raise ProcessorError(
@@ -204,7 +216,7 @@ class PatchManager(Processor):
         for pol in pol_list:
             # now grab policy
             self.logger.debug(
-                "examining patch policy %s" % pol.findtext("name")
+                "examining patch policy %s", pol.findtext("name")
             )
             if "Test" in pol.findtext("name"):
                 pol_id = pol.findtext("id")
@@ -254,9 +266,8 @@ class PatchManager(Processor):
 
     def main(self):
         """Do it!"""
-        self.setup_logging()
         self.logger.debug("Starting Main")
-        # clear any pre-exising summary result
+        # clear any pre-existing summary result
         if "patch_manager_summary_result" in self.env:
             del self.env["patch_manager_summary_result"]
         self.logger.debug("About to update package")

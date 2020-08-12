@@ -8,6 +8,9 @@
 
 """See docstring for Production class"""
 
+# pylint: disable=invalid-name
+# pylint: disable=too-few-public-methods
+
 from os import path
 import plistlib
 import xml.etree.ElementTree as ET
@@ -15,11 +18,11 @@ import datetime
 import logging.handlers
 import requests
 
-from autopkglib import Processor, ProcessorError
+from autopkglib import Processor, ProcessorError # pylint: disable=import-error
 
 APPNAME = "Production"
 LOGLEVEL = logging.DEBUG
-
+LOGFILE = "/usr/local/var/log/%s.log" % APPNAME
 
 __all__ = [APPNAME]
 
@@ -51,11 +54,26 @@ class Production(Processor):
         "production_summary_result": {"description": "Summary of action"}
     }
 
-    # a package
-    pkg = Package()
+    def __init__(self):
+        """Defines a nicely formatted logger"""
 
-    def load_prefs(self):
-        """ load the preferences from file """
+        self.logger = logging.getLogger(APPNAME)
+        self.logger.setLevel(LOGLEVEL)
+        # we may be the second and subsequent iterations of JPCImporter
+        # and already have a handler.
+        if len(self.logger.handlers) > 0:
+            return
+        handler = logging.handlers.TimedRotatingFileHandler(
+            LOGFILE, when="D", interval=1, backupCount=7
+        )
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        self.logger.addHandler(handler)
+
         # Which pref format to use, autopkg or jss_importer
         autopkg = False
         if autopkg:
@@ -63,56 +81,20 @@ class Production(Processor):
                 "~/Library/Preferences/com.github.autopkg.plist"
             )
             prefs = plistlib.load(open(plist, "rb"))
-            url = prefs["JSS_URL"]
-            auth = (prefs["API_USERNAME"], prefs["API_PASSWORD"])
+            self.url = prefs["JSS_URL"]
+            self.auth = (prefs["API_USERNAME"], prefs["API_PASSWORD"])
         else:
             plist = path.expanduser("~/Library/Preferences/JPCImporter.plist")
             prefs = plistlib.load(open(plist, "rb"))
-            url = prefs["url"]
-            auth = (prefs["user"], prefs["password"])
-        base = url + "/JSSResource"
-        return (base, auth)
-
-    def setup_logging(self):
-        """Defines a nicely formatted logger"""
-        LOGFILE = "/usr/local/var/log/%s.log" % APPNAME
-
-        self.logger = logging.getLogger(APPNAME)
-        # we may be the second and subsequent iterations of JPCImporter
-        # and already have a handler.
-        if len(self.logger.handlers):
-            return
-        ch = logging.handlers.TimedRotatingFileHandler(
-            LOGFILE, when="D", interval=1, backupCount=7
-        )
-        ch.setFormatter(
-            logging.Formatter(
-                "%(asctime)s %(levelname)s %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-        self.logger.addHandler(ch)
-        self.logger.setLevel(LOGLEVEL)
-
-    def lookup(self):
-        """look up test policy to find package name, id and version """
-        self.logger.debug("Starting")
-        url = self.base + "/policies/name/Test-" + self.pkg.title
-        pack_base = "package_configuration/packages/package"
-        self.logger.debug("About to request %s", url)
-        ret = requests.get(url, auth=self.auth)
-        if ret.status_code != 200:
-            raise ProcessorError(
-                "Test policy download failed: {} : {}".format(
-                    ret.status_code, url
-                )
-            )
-        policy = ET.fromstring(ret.text)
-        test_id = policy.findtext("general/id")
-        self.logger.debug("Got test policy id %s", test_id)
-        self.pkg.idn = policy.findtext(pack_base + "/id")
-        self.pkg.name = policy.findtext(pack_base + "/name")
-        self.pkg.version = self.pkg.name.split("-", 1)[1][:-4]
+            self.server = prefs["url"]
+            self.auth = (prefs["user"], prefs["password"])
+         # do some set up
+        self.hdrs = {"Accept": "application/xml", "Content-type": "application/xml"}
+        self.base = self.server + "/JSSResource/"
+        self.pkg = Package()
+        self.pkg.pkg_path = self.env.get("pkg_path")
+        self.pkg.name = path.basename(self.pkg.pkg_path)
+        self.pkg.title = self.pkg.name.split("-")[0]
 
     def production(self):
         """change the package in the production policy"""
@@ -138,6 +120,10 @@ class Production(Processor):
                     ret.status_code, url
                 )
             )
+
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-statements
 
     def patch(self):
         """now we start on the patch definition"""
@@ -296,7 +282,7 @@ class Production(Processor):
             "data": {"title": self.pkg.title, "version": self.pkg.version,},
         }
         self.logger.debug(
-            "Summary done: %s" % self.env["production_summary_result"]
+            "Summary done: %s", self.env["production_summary_result"]
         )
 
 
