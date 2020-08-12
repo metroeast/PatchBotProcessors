@@ -19,6 +19,7 @@ from autopkglib import Processor, ProcessorError
 
 APPNAME = "PatchManager"
 LOGLEVEL = logging.DEBUG
+LOGFILE = "/usr/local/var/log/%s.log" % APPNAME
 
 __all__ = [APPNAME]
 
@@ -51,17 +52,16 @@ class PatchManager(Processor):
 
     def setup_logging(self):
         """Defines a nicely formatted logger"""
-        LOGFILE = "/usr/local/var/log/%s.log" % APPNAME
 
         self.logger = logging.getLogger(APPNAME)
         # we may be the second and subsequent iterations of JPCImporter
         # and already have a handler.
-        if len(self.logger.handlers):
+        if len(self.logger.handlers) > 0:
             return
-        ch = logging.handlers.TimedRotatingFileHandler(
+        handler = logging.handlers.TimedRotatingFileHandler(
             LOGFILE, when="D", interval=1, backupCount=7
         )
-        ch.setFormatter(
+        handler.setFormatter(
             logging.Formatter(
                 "%(asctime)s %(levelname)s %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
@@ -81,32 +81,29 @@ class PatchManager(Processor):
             plist = path.expanduser(
                 "~/Library/Preferences/com.github.autopkg.plist"
             )
-            fp = open(plist, "rb")
-            prefs = plistlib.load(fp)
+            prefs = plistlib.load(open(plist, "rb"))
             self.base = prefs["JSS_URL"] + "/JSSResource/"
             self.auth = (prefs["API_USERNAME"], prefs["API_PASSWORD"])
         else:
             plist = path.expanduser("~/Library/Preferences/JPCImporter.plist")
-            fp = open(plist, "rb")
-            prefs = plistlib.load(fp)
+            prefs = plistlib.load(open(plist, "rb"))
             self.base = prefs["url"] + "/JSSResource/"
             self.auth = (prefs["user"], prefs["password"])
         policy_name = "TEST-{}".format(self.pkg.title)
         url = self.base + "policies/name/{}".format(policy_name)
         self.logger.debug(
-            "About to make request URL %s, auth %s" % (url, self.auth)
+            "About to make request URL %s, auth %s", url, self.auth
         )
         ret = requests.get(url, auth=self.auth)
         if ret.status_code != 200:
             self.logger.debug(
-                "TEST Policy %s not found error: %s"
-                % (policy_name, ret.status_code)
+                "TEST Policy %s not found error: %s",
+                policy_name, ret.status_code
             )
             raise ProcessorError(
                 "Policy get for: %s failed with code: %s"
                 % (url, ret.status_code)
             )
-        self.logger.debug("TEST policy found")
         root = ET.fromstring(ret.text)
         self.pkg.idn = root.find(
             "package_configuration/packages/package/id"
@@ -139,7 +136,6 @@ class PatchManager(Processor):
         for ps_title in root.findall("patch_software_title"):
             if ps_title.findtext("name") == self.pkg.patch:
                 ident = ps_title.findtext("id")
-                self.logger.debug("PST ID found")
                 break
         if ident == 0:
             raise ProcessorError(
@@ -147,7 +143,7 @@ class PatchManager(Processor):
             )
         # get the patch list for our title
         url = self.base + "patchsoftwaretitles/id/" + str(ident)
-        self.logger.debug("About to request PST by ID: %s" % url)
+        self.logger.debug("About to request PST by ID: %s", url)
         ret = requests.get(url, auth=self.auth)
         if ret.status_code != 200:
             raise ProcessorError(
@@ -155,7 +151,6 @@ class PatchManager(Processor):
                     str(ident), self.pkg.name
                 )
             )
-        self.logger.debug("Got our PST")
         root = ET.fromstring(ret.text)
         # find the patch version that matches our version
         done = False
@@ -194,7 +189,7 @@ class PatchManager(Processor):
         # now the patch policy - this will be a journey as well
         # first get the list of patch policies for our software title
         url = self.base + "patchpolicies/softwaretitleconfig/id/" + str(ident)
-        self.logger.debug("About to request patch list: %s" % url)
+        self.logger.debug("About to request patch list: %s", url)
         ret = requests.get(url, auth=self.auth)
         if ret.status_code != 200:
             raise ProcessorError(
@@ -205,7 +200,7 @@ class PatchManager(Processor):
         root = ET.fromstring(ret.text)
         # loop through policies for the Test one
         pol_list = root.findall("patch_policy")
-        self.logger.debug("Got the PP list and name is: %s" % self.pkg.name)
+        self.logger.debug("Got the PP list and name is: %s", self.pkg.name)
         for pol in pol_list:
             # now grab policy
             self.logger.debug(
@@ -214,7 +209,7 @@ class PatchManager(Processor):
             if "Test" in pol.findtext("name"):
                 pol_id = pol.findtext("id")
                 url = self.base + "patchpolicies/id/" + str(pol_id)
-                self.logger.debug("About to request PP by ID: %s" % url)
+                self.logger.debug("About to request PP by ID: %s", url)
                 ret = requests.get(url, auth=self.auth)
                 if ret.status_code != 200:
                     raise ProcessorError(
@@ -225,16 +220,14 @@ class PatchManager(Processor):
                 # now edit the patch policy
                 root = ET.fromstring(ret.text)
                 self.logger.debug(
-                    "Got patch policy with version : %s : and we are : %s :"
-                    % (
-                        root.findtext("general/target_version"),
-                        self.pkg.version,
-                    )
+                    "Got patch policy with version : %s : and we are : %s :",
+                    root.findtext("general/target_version"),
+                    self.pkg.version
                 )
                 if root.findtext("general/target_version") == self.pkg.version:
                     # we have already done this version
                     self.logger.debug(
-                        "Version %s already done" % self.pkg.version
+                        "Version %s already done", self.pkg.version
                     )
                     return 0
                 root.find("general/target_version").text = self.pkg.version
@@ -247,7 +240,7 @@ class PatchManager(Processor):
                     "user_interaction/self_service_description"
                 ).text = desc
                 data = ET.tostring(root)
-                self.logger.debug("About to change PP: %s" % url)
+                self.logger.debug("About to change PP: %s", url)
                 ret = requests.put(url, auth=self.auth, data=data)
                 if ret.status_code != 201:
                     raise ProcessorError(
@@ -287,7 +280,7 @@ class PatchManager(Processor):
                 % (self.pkg.title, self.pkg.version)
             )
         else:
-            self.logger.debug("Zero policy id %s" % self.pkg.patch)
+            self.logger.debug("Zero policy id %s", self.pkg.patch)
 
 
 if __name__ == "__main__":
