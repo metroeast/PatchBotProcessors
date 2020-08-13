@@ -8,6 +8,7 @@
 # ARW 2020-03-12 Version 2 with changes for new workflow
 # ARW 2020-06-09 Some changes to log levels and cleaning up code
 # ARW 2020-06-24 Final tidy before publication
+# ARW 2020-08-11 Code clean and refactor - now lints with a couple of disables
 
 """See docstring for JPCImporter class"""
 
@@ -117,7 +118,7 @@ class JPCImporter(Processor):
         command += ["-X", "POST", self.server + "/dbfileupload"]
         command += ["--header", "DESTINATION: 0", "--header", "OBJECT_ID: -1"]
         command += ["--header", "FILE_TYPE: 0"]
-        command += ["--header", "FILE_NAME: {}".format(self.pkg.name)]
+        command += ["--header", f"FILE_NAME: {self.pkg.name}"]
         command += ["--upload-file", pkg_path]
         self.logger.debug("About to curl: %s", self.pkg.name)
         # self.logger.debug("Auth: %s", curl_auth)
@@ -126,20 +127,20 @@ class JPCImporter(Processor):
         packid = ET.fromstring(ret).findtext("id")
         if packid == "":
             raise ProcessorError(
-                "curl failed for url :{}".format(self.server + "/dbfileupload")
+                f"curl failed for url :{self.server}/dbfileupload"
             )
         self.logger.debug("Uploaded and got ID: %s", packid)
 
         # build the package record XML
-        data = "<package><id>{}</id>".format(packid)
+        data = f"<package><id>{packid}</id>"
         data += "<category>Applications</category>"
         data += "<notes>Built by Autopkg. {}</notes></package>".format(
             datetime.datetime.now().strftime("(%Y-%m-%d)")
-            )
+        )
 
         # we use requests for all the other API calls as it codes nicer
         # update the package details
-        url = self.base + "packages/id/{}".format(packid)
+        url = f"{self.base}packages/id/{packid}"
         # we set up some retries as sometimes the server
         # takes a minute to settle with a new package upload
         count = 0
@@ -152,16 +153,16 @@ class JPCImporter(Processor):
             self.logger.debug("Attempt failed with code: %s URL: %s", ret.status_code, url)
             if count > 10:
                 raise ProcessorError(
-                    "Package update failed with code: %s" % ret.status_code
+                    f"Package update failed with code: {ret.status_code}"
                 )
             sleep(20)
 
         # now for the test policy update
-        url = self.base + "policies/name/TEST-{}".format(self.pkg.title)
+        url = f"{self.base}policies/name/TEST-{self.pkg.title}"
         ret = requests.get(url, auth=self.auth)
         if ret.status_code != 200:
             raise ProcessorError(
-                "Test Policy %s not found: %s" % (url, ret.status_code)
+                f"Test Policy {url} not found: {ret.status_code}"
             )
         self.logger.warning("Test policy found")
         root = ET.fromstring(ret.text)
@@ -170,12 +171,12 @@ class JPCImporter(Processor):
         )
         root.find("general/enabled").text = "false"
         root.find("package_configuration/packages/package/name").text = self.pkg.name
-        url = self.base + "policies/id/{}".format(root.findtext("general/id"))
+        url = f"{self.base}policies/id/{root.findtext('general/id')}"
         data = ET.tostring(root)
         ret = requests.put(url, auth=self.auth, data=data)
         if ret.status_code != 201:
             raise ProcessorError(
-                "Test policy %s update failed: %s" % (url, ret.status_code)
+                f"Test policy {url} update failed: {ret.status_code}"
             )
         pol_id = ET.fromstring(ret.text).findtext("id")
         self.logger.info("Done Package: %s Test Policy: %s", self.pkg.name, pol_id)
@@ -188,7 +189,7 @@ class JPCImporter(Processor):
             del self.env["jpc_importer_summary_result"]
         pkg_path = self.env.get("pkg_path")
         if not path.exists(self.pkg_path):
-            raise ProcessorError("Package not found: %s" % pkg_path)
+            raise ProcessorError(f"Package not found: {pkg_path}")
         pol_id = self.upload(self.pkg_path)
         self.logger.debug("Done: %s: %s", pol_id, self.pkg_path)
         if pol_id != 0:
