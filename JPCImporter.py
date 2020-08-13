@@ -59,7 +59,7 @@ class JPCImporter(Processor):
         "jpc_importer_summary_result": {"description": "Summary of action"}
     }
 
-    def __init__(self):
+    def __init__(self, pkg_path):
         """Defines a nicely formatted logger"""
 
         self.logger = logging.getLogger(APPNAME)
@@ -97,9 +97,6 @@ class JPCImporter(Processor):
         self.hdrs = {"Accept": "application/xml", "Content-type": "application/xml"}
         self.base = self.server + "/JSSResource/"
         self.pkg = Package()
-        self.pkg.pkg_path = self.env.get("pkg_path")
-        self.pkg.name = path.basename(self.pkg.pkg_path)
-        self.pkg.title = self.pkg.name.split("-")[0]
 
     def upload(self, pkg_path):
         """Upload the package `pkg_path` and returns the ID returned by JPC"""
@@ -187,7 +184,8 @@ class JPCImporter(Processor):
         # clear any pre-existing summary result
         if "jpc_importer_summary_result" in self.env:
             del self.env["jpc_importer_summary_result"]
-        pkg_path = self.env.get("pkg_path")
+        self.pkg.pkg_path = self.env.get("pkg_path")
+        self.pkg.name = path.basename(self.pkg.pkg_path)
         if not path.exists(self.pkg_path):
             raise ProcessorError(f"Package not found: {pkg_path}")
         pol_id = self.upload(self.pkg_path)

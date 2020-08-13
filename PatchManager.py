@@ -51,7 +51,7 @@ class PatchManager(Processor):
         "patch_manager_summary_result": {"description": "Summary of action"}
     }
 
-    def __init__(self):
+    def __init__(self, pkg_path):
         """Defines a nicely formatted logger"""
 
         self.logger = logging.getLogger(APPNAME)
