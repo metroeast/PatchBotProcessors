@@ -19,24 +19,12 @@ import requests
 
 from autopkglib import Processor, ProcessorError
 
+from Package import Package
+
 APPNAME = "PatchManager"
 LOGLEVEL = logging.DEBUG
 
 __all__ = [APPNAME]
-
-
-class Package:
-    """A package. This exists merely to carry the variables"""
-
-    # the application part of the package name matching the test policy
-    package = ""
-    patch = ""  # name of the patch definition
-    name = ""  # full name of the package '<package>-<version>.pkg'
-    version = ""  # the version of our package
-    idn = ""  # id of the package in our JP server
-    test_weekdays = ""  # allowed weekdays for deployment to test
-    test_not_before = ""  # earliest time for deployment to test
-    test_not_after = ""  # latest time for deployment to test
 
 
 class PatchManager(Processor):
