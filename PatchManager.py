@@ -335,6 +335,14 @@ class PatchManager(Processor):
                 root.find(
                     "user_interaction/self_service_description"
                 ).text = desc
+                # manage issue: no self_service_icon assigned
+                # if element is None:
+                #     create ID SubElement, value = -1, to get the record to be accepted
+                if root.find("user_interaction/self_service_icon/id") is None:
+                    icon_rec = root.find("user_interaction/self_service_icon")
+                    add = ET.SubElement(icon_rec, "id")
+                    add.text = "-1"
+
                 data = ET.tostring(root)
                 self.logger.debug("About to change PP: %s" % url)
                 ret = requests.put(url, auth=self.auth, data=data)
