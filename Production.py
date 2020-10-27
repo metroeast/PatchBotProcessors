@@ -557,7 +557,7 @@ class Production(Processor):
         else:
             log_msg = self.pkg.prod_not_after
         self.autopkg_msg(
-            "Production not before time: %s "
+            "Production not after time: %s "
             % log_msg
         )
 

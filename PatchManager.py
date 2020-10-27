@@ -392,7 +392,7 @@ class PatchManager(Processor):
         else:
             log_msg = self.pkg.test_not_before
         self.autopkg_msg(
-            "Production not before time: %s "
+            "Testing not before time: %s "
             % log_msg
         )
 
@@ -404,7 +404,7 @@ class PatchManager(Processor):
         else:
             log_msg = self.pkg.test_not_after
         self.autopkg_msg(
-            "Production not before time: %s "
+            "Testing not after time: %s "
             % log_msg
         )
 
