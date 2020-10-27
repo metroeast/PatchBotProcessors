@@ -14,6 +14,7 @@
 """See docstring for JPCImporter class"""
 
 from os import path
+from shutil import copy2
 import subprocess
 import plistlib
 import xml.etree.ElementTree as ET
@@ -197,9 +198,51 @@ class JPCImporter(Processor):
         self.autopkg_msg("%s policy updated with pkg %s" % (policy_name, pkg))
         return pol_id
 
+    def copy_local(self, pkg_path):
+        """Copy the package `pkg_path` to a local path if specified in config"""
+        self.logger.info("Copy to local path?")
+
+        # load path from config
+        plist = path.expanduser("~/Library/Preferences/JPCImporter.plist")
+        prefs = plistlib.load(open(plist, "rb"))
+        try:
+            local_path = prefs["local_path"]
+            
+            # the package path is a sub directory inside the distribution point
+            local_path += "Packages/"
+            self.logger.info("config local path: %s", local_path)
+            
+            if not path.exists(local_path):
+                self.logger.info("local path is not present, skipping copy")
+                return
+            
+        except KeyError:
+            # no path in config
+            self.logger.info("no local_path configured, skipping")
+            return
+        
+        # is the file already in the destination path?
+        pkg = path.basename(pkg_path)
+        if path.exists(local_path + pkg):
+            self.logger.info("The pkg: %s is already at destination: %s", pkg, local_path)
+            return
+        
+        # all is well, let's copy the file
+        self.logger.info("Copying pkg from: %s :to: %s", pkg_path, local_path)
+        self.autopkg_msg("Local copy from: %s :to: %s" % (pkg_path, local_path))
+        try:
+            copy_result = copy2(pkg_path, local_path)
+            self.logger.info("File copy created: %s", copy_result)
+        except IOError as err:
+            self.logger.info("File copy IO Error: %s", err)
+        
+        # end copy_local
+        return
+
     def main(self):
         """Do it!"""
         self.setup_logging()
+        
         # clear any pre-existing summary result
         if "jpc_importer_summary_result" in self.env:
             del self.env["jpc_importer_summary_result"]
@@ -209,6 +252,10 @@ class JPCImporter(Processor):
         pol_id = self.upload(pkg_path)
         self.logger.debug("Done: %s: %s", pol_id, pkg_path)
         if pol_id != 0:
+            # success, copy local file if config indicates
+            self.copy_local(pkg_path)
+            
+            # report back to AutoPkg
             self.env["jpc_importer_summary_result"] = {
                 "summary_text": "The following packages were uploaded:",
                 "report_fields": ["policy_id", "pkg_path"],
