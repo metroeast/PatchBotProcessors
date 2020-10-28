@@ -19,26 +19,13 @@ import requests
 
 from autopkglib import Processor, ProcessorError
 
+from Package import Package
+
 APPNAME = "Production"
 LOGLEVEL = logging.DEBUG
 
 
 __all__ = [APPNAME]
-
-
-class Package:
-    """A package. This exists merely to carry the variables"""
-
-    # the application title from package name matching the test policy
-    package = ""
-    patch = ""  # name of the patch definition
-    name = ""  # full name of the package '<package>-<version>.pkg'
-    version = ""  # the version of our package
-    idn = ""  # id of the package in our JP server
-    min_days_until_prod = ""  # minimum days before move to production
-    prod_weekdays = ""  # allowed weekdays for move to production
-    prod_not_before = ""  # earliest time for move to production
-    prod_not_after = ""  # latest time for move to production
 
 
 class Production(Processor):
